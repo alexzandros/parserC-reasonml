@@ -5,16 +5,19 @@ module ParserC = {
 
     type parser ('a) = Parser(string => (parseResult('a) => unit) => unit)
 
-    let i = x => ()
+    let compose = (f, g) =>
+        x => g(f(x))
 
-    let run = (~k=i, parser, cadena) => 
+    let ( -| ) = compose
+
+    let run = (parser, cadena, k) => 
     switch(parser) {
     | Parser(fn) => fn(cadena, k)
     }
 
     let parseChar = caracter =>{
         let innerFn = (cadena, k) => {
-            open String;
+            String.(
             switch (length(cadena)) {
             | 0 => k(Failure("Final de la cadena", cadena))
             | _ => let car1 = sub(cadena, 0,1)
@@ -23,87 +26,92 @@ module ParserC = {
                     k(Success(caracter, resto))
                 else 
                 k(Failure({j|Esperaba $caracter y obtuve $car1|j}, cadena))
-            }
+            })
         }
         Parser(innerFn)
     }
 
     let parseNotChar = caracter =>{
-    let innerFn = cadena => String.(
-    switch (length(cadena)) {
-    | 0 => Failure("Final de la cadena", cadena)
-    | _ => let car1 = sub(cadena, 0,1)
-            let resto = sub(cadena, 1, length(cadena) - 1)
-        if (car1 != caracter) 
-            Success(car1, resto)
-        else 
-        Failure({j|No Esperaba $caracter |j}, cadena);
-    })
+    let innerFn = (cadena, k) => {
+        String.(
+        switch (length(cadena)) {
+        | 0 => k(Failure("Final de la cadena", cadena))
+        | _ => let car1 = sub(cadena, 0,1)
+                let resto = sub(cadena, 1, length(cadena) - 1)
+            if (car1 != caracter) 
+                k(Success(car1, resto))
+            else 
+            k(Failure({j|No Esperaba $caracter |j}, cadena))
+    })}
     Parser(innerFn)
     }
 
     let parserAny: unit => parser(string) = () =>{
-    let innerFn = cadena => String.(
-        switch (length(cadena)) {
-        | 0 => Failure("Final de la cadena", cadena)
-        | _ => let car1 = sub(cadena, 0,1)
-                let resto = sub(cadena, 1, length(cadena) - 1)
-                Success(car1, resto)
-        })
+    let innerFn = (cadena, k) => {
+        String.(
+            switch (length(cadena)) {
+            | 0 => k(Failure("Final de la cadena", cadena))
+            | _ => let car1 = sub(cadena, 0,1)
+                    let resto = sub(cadena, 1, length(cadena) - 1)
+                    k(Success(car1, resto))
+        })}
     Parser(innerFn)
     }
 
     let parserOr = (p1, p2) =>{
-    let innerFn = cadena => String.(
-    switch (length(cadena)) {
-    | 0 => Failure("Final de la cadena", cadena)
-    | _ => switch(run (p1, cadena)) {
-            | Success(_) as s1 => s1
-            | Failure (_) => run(p2, cadena)
-            }
-    })
-    Parser(innerFn)
+        let innerFn = (cadena, k) => 
+            String.(
+            switch (length(cadena)) {
+            | 0 => k(Failure("Final de la cadena", cadena))
+            | _ => run (p1, cadena,
+                        fun 
+                        | Success(_) as s1 => k(s1)
+                        | Failure(_) => run (p2, cadena, k))
+            })
+        Parser(innerFn)
     }
 
     let ( <|> ) = parserOr
 
     let parserAnd = (p1, p2) => {
-    let innerFn = (cadena) => String.(
-        switch (length(cadena)) {
-        | 0 => Failure("Final de la cadena", cadena)
-        | _ =>
-            switch (run (p1, cadena)) {
-            | Success(valor1, resto1) =>
-                switch (run (p2, resto1)) {
-                | Success (valor2, resto2) => Success((valor1, valor2) , resto2)
-                | Failure (_, _) as e1 => e1
-                }
-            | Failure(_, _) as e1 => e1
-            }
-        })
+        let innerFn = (cadena, k) => 
+            String.(
+            switch (length(cadena)) {
+            | 0 => k(Failure("Final de la cadena", cadena))
+            | _ => run (p1, cadena,
+                        fun
+                        | Success(valor1, resto1) =>
+                            run (p2, resto1,
+                                fun 
+                                | Success (valor2, resto2) => k(Success((valor1, valor2) , resto2))
+                                | Failure (_, _) as e1 => k(e1))
+                        | Failure(_, _) as e1 => k(e1))
+                
+            })
     Parser(innerFn)
-    };
+    }
 
     let ( >-> ) = parserAnd;
 
     let parserMap = (fn, p) => {
-    let innerFn = cadena => String.(
-        switch (length(cadena)) {
-        | 0 => Failure("Final de la cadena", cadena)
-        | _ =>
-            switch (run(p, cadena)) {
-            | Success(valor, resto) => Success(fn(valor), resto)
-            | Failure(_,_) as e1 =>e1
-            };
-        })
-    Parser(innerFn)
+        let innerFn = (cadena, k) => 
+            String.(
+                switch (length(cadena)) {
+                | 0 => k(Failure("Final de la cadena", cadena))
+                | _ =>
+                        run(p, cadena, 
+                            fun
+                            | Success(valor, resto) => k(Success(fn(valor), resto))
+                            | Failure(_,_) as e1 => k(e1))
+                })
+        Parser(innerFn)
     };
 
     let ( <@> ) = parserMap
 
     let parserReturn = valor => {
-        let innerFn = cadena => 
-            Success(valor, cadena)
+        let innerFn = (cadena, k) => 
+            k(Success(valor, cadena))
         Parser(innerFn)
     }
 
@@ -140,48 +148,46 @@ module ParserC = {
         parserReturn(f) <*> xP <*> yP
 
     let rec many = p => {
-        let innerFn = cadena => {
-            switch (run(p, cadena)) {
-            | Failure (_) => Success([], cadena)
-            | Success (valor1,resto1)  => 
-                switch(run(many(p),resto1)) {
-                | Success (valor2,resto2) => Success(List.append([valor1], valor2), resto2)
-                | Failure(_) => Success ([valor1], resto1)
-                }
-            }
-        }
+        let innerFn = (cadena, k) => 
+            run(p, cadena,
+                fun
+                | Failure (_) => k(Success([], cadena))
+                | Success (valor1,resto1)  => 
+                    run(many(p),resto1,
+                        fun
+                        | Success (valor2,resto2) => k(Success(List.append([valor1], valor2), resto2))
+                        | Failure(_) => k(Success ([valor1], resto1))))
         Parser(innerFn)
     }
 
     let many1 = p => {
-        let innerFn = cadena => {
-            switch (run(p, cadena)) {
-            | Failure (_) as f => f
-            | Success (valor1,resto1)  => 
-                switch(run(many(p),resto1)) {
-                | Success (valor2,resto2) => Success(List.append([valor1], valor2), resto2)
-                | Failure(_) => Success ([valor1], resto1)
-                }
-            }
-        }
+        let innerFn = (cadena, k) => 
+            run(p, cadena,
+                fun
+                | Failure (_) as f => k(f)
+                | Success (valor1,resto1)  => 
+                    run(many(p),resto1,
+                        fun
+                        | Success (valor2,resto2) => k(Success(List.append([valor1], valor2), resto2))
+                        | Failure(_) => k(Success([valor1], resto1))))
         Parser(innerFn)
     }
 
     let optional = (p) => {
-        let innerFn = cadena => 
-            switch (run (p, cadena)) {
-                    | Success(v1,r1) => Success(Some(v1), r1)
-                    | Failure(_) => Success(None, cadena)
-                    }
+        let innerFn = (cadena, k) => 
+            run (p, cadena,
+                    fun
+                    | Success(v1,r1) => k(Success(Some(v1), r1))
+                    | Failure(_) => k(Success(None, cadena)))
         Parser(innerFn)
     }
 
     let skip = p => {
-        let innerFn = cadena => 
-            switch (run(p, cadena)) {
-            | Success(_v1, r1) => Success((), r1)
-            | Failure(_) as f => f
-            };
+        let innerFn = (cadena, k) => 
+            run(p, cadena,
+                fun
+                | Success(_v1, r1) => k(Success((), r1))
+                | Failure(_) as f => k(f))
         Parser(innerFn)
     }
 
@@ -208,5 +214,6 @@ module ParserC = {
     let intP = {arreglo => arreglo |> Array.of_list |> Js.Array.joinWith("") |> int_of_string } <@> digits
 };
 
-let miko = ParserC.(run(parserAnd(intP,  optional(parseChar(";"))),"23;"));
+ParserC.(run(Array.of_list -| Js.Array.joinWith("") <@> digits -<< parseChar(";"),
+  "2385;45687", Js.log ));
 

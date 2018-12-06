@@ -10,168 +10,173 @@ var Pervasives = require("bs-platform/lib/js/pervasives.js");
 var Caml_format = require("bs-platform/lib/js/caml_format.js");
 var Caml_option = require("bs-platform/lib/js/caml_option.js");
 
-function identity(x) {
-  return x;
+function compose(f, g, x) {
+  return Curry._1(g, Curry._1(f, x));
 }
 
-function run($staropt$star, parser, cadena) {
-  return Curry._1(parser[0], cadena);
+function run(parser, cadena, k) {
+  return Curry._2(parser[0], cadena, k);
 }
 
 function parseChar(caracter) {
-  var innerFn = function (cadena) {
+  var innerFn = function (cadena, k) {
     var match = cadena.length;
     if (match !== 0) {
       var car1 = $$String.sub(cadena, 0, 1);
       var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
       if (car1 === caracter) {
-        return /* Success */Block.__(0, [
-                  caracter,
-                  resto
-                ]);
+        return Curry._1(k, /* Success */Block.__(0, [
+                      caracter,
+                      resto
+                    ]));
       } else {
-        return /* Failure */Block.__(1, [
-                  "Esperaba " + (String(caracter) + (" y obtuve " + (String(car1) + ""))),
-                  cadena
-                ]);
+        return Curry._1(k, /* Failure */Block.__(1, [
+                      "Esperaba " + (String(caracter) + (" y obtuve " + (String(car1) + ""))),
+                      cadena
+                    ]));
       }
     } else {
-      return /* Failure */Block.__(1, [
-                "Final de la cadena",
-                cadena
-              ]);
+      return Curry._1(k, /* Failure */Block.__(1, [
+                    "Final de la cadena",
+                    cadena
+                  ]));
     }
   };
   return /* Parser */[innerFn];
 }
 
 function parseNotChar(caracter) {
-  var innerFn = function (cadena) {
+  var innerFn = function (cadena, k) {
     var match = cadena.length;
     if (match !== 0) {
       var car1 = $$String.sub(cadena, 0, 1);
       var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
       if (car1 !== caracter) {
-        return /* Success */Block.__(0, [
-                  car1,
-                  resto
-                ]);
+        return Curry._1(k, /* Success */Block.__(0, [
+                      car1,
+                      resto
+                    ]));
       } else {
-        return /* Failure */Block.__(1, [
-                  "No Esperaba " + (String(caracter) + " "),
-                  cadena
-                ]);
+        return Curry._1(k, /* Failure */Block.__(1, [
+                      "No Esperaba " + (String(caracter) + " "),
+                      cadena
+                    ]));
       }
     } else {
-      return /* Failure */Block.__(1, [
-                "Final de la cadena",
-                cadena
-              ]);
+      return Curry._1(k, /* Failure */Block.__(1, [
+                    "Final de la cadena",
+                    cadena
+                  ]));
     }
   };
   return /* Parser */[innerFn];
 }
 
 function parserAny(param) {
-  var innerFn = function (cadena) {
+  var innerFn = function (cadena, k) {
     var match = cadena.length;
     if (match !== 0) {
       var car1 = $$String.sub(cadena, 0, 1);
       var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
-      return /* Success */Block.__(0, [
-                car1,
-                resto
-              ]);
+      return Curry._1(k, /* Success */Block.__(0, [
+                    car1,
+                    resto
+                  ]));
     } else {
-      return /* Failure */Block.__(1, [
-                "Final de la cadena",
-                cadena
-              ]);
+      return Curry._1(k, /* Failure */Block.__(1, [
+                    "Final de la cadena",
+                    cadena
+                  ]));
     }
   };
   return /* Parser */[innerFn];
 }
 
 function parserOr(p1, p2) {
-  var innerFn = function (cadena) {
+  var innerFn = function (cadena, k) {
     var match = cadena.length;
     if (match !== 0) {
-      var s1 = run(undefined, p1, cadena);
-      if (s1.tag) {
-        return run(undefined, p2, cadena);
-      } else {
-        return s1;
-      }
+      return run(p1, cadena, (function (s1) {
+                    if (s1.tag) {
+                      return run(p2, cadena, k);
+                    } else {
+                      return Curry._1(k, s1);
+                    }
+                  }));
     } else {
-      return /* Failure */Block.__(1, [
-                "Final de la cadena",
-                cadena
-              ]);
+      return Curry._1(k, /* Failure */Block.__(1, [
+                    "Final de la cadena",
+                    cadena
+                  ]));
     }
   };
   return /* Parser */[innerFn];
 }
 
 function parserAnd(p1, p2) {
-  var innerFn = function (cadena) {
+  var innerFn = function (cadena, k) {
     var match = cadena.length;
     if (match !== 0) {
-      var e1 = run(undefined, p1, cadena);
-      if (e1.tag) {
-        return e1;
-      } else {
-        var e1$1 = run(undefined, p2, e1[1]);
-        if (e1$1.tag) {
-          return e1$1;
-        } else {
-          return /* Success */Block.__(0, [
-                    /* tuple */[
-                      e1[0],
-                      e1$1[0]
-                    ],
-                    e1$1[1]
-                  ]);
-        }
-      }
+      return run(p1, cadena, (function (e1) {
+                    if (e1.tag) {
+                      return Curry._1(k, e1);
+                    } else {
+                      var valor1 = e1[0];
+                      return run(p2, e1[1], (function (e1) {
+                                    if (e1.tag) {
+                                      return Curry._1(k, e1);
+                                    } else {
+                                      return Curry._1(k, /* Success */Block.__(0, [
+                                                    /* tuple */[
+                                                      valor1,
+                                                      e1[0]
+                                                    ],
+                                                    e1[1]
+                                                  ]));
+                                    }
+                                  }));
+                    }
+                  }));
     } else {
-      return /* Failure */Block.__(1, [
-                "Final de la cadena",
-                cadena
-              ]);
+      return Curry._1(k, /* Failure */Block.__(1, [
+                    "Final de la cadena",
+                    cadena
+                  ]));
     }
   };
   return /* Parser */[innerFn];
 }
 
 function parserMap(fn, p) {
-  var innerFn = function (cadena) {
+  var innerFn = function (cadena, k) {
     var match = cadena.length;
     if (match !== 0) {
-      var e1 = run(undefined, p, cadena);
-      if (e1.tag) {
-        return e1;
-      } else {
-        return /* Success */Block.__(0, [
-                  Curry._1(fn, e1[0]),
-                  e1[1]
-                ]);
-      }
+      return run(p, cadena, (function (e1) {
+                    if (e1.tag) {
+                      return Curry._1(k, e1);
+                    } else {
+                      return Curry._1(k, /* Success */Block.__(0, [
+                                    Curry._1(fn, e1[0]),
+                                    e1[1]
+                                  ]));
+                    }
+                  }));
     } else {
-      return /* Failure */Block.__(1, [
-                "Final de la cadena",
-                cadena
-              ]);
+      return Curry._1(k, /* Failure */Block.__(1, [
+                    "Final de la cadena",
+                    cadena
+                  ]));
     }
   };
   return /* Parser */[innerFn];
 }
 
 function parserReturn(valor) {
-  var innerFn = function (cadena) {
-    return /* Success */Block.__(0, [
-              valor,
-              cadena
-            ]);
+  var innerFn = function (cadena, k) {
+    return Curry._1(k, /* Success */Block.__(0, [
+                  valor,
+                  cadena
+                ]));
   };
   return /* Parser */[innerFn];
 }
@@ -216,99 +221,105 @@ function lift2(f, xP, yP) {
 }
 
 function many(p) {
-  var innerFn = function (cadena) {
-    var match = run(undefined, p, cadena);
-    if (match.tag) {
-      return /* Success */Block.__(0, [
-                /* [] */0,
-                cadena
-              ]);
-    } else {
-      var resto1 = match[1];
-      var valor1 = match[0];
-      var match$1 = run(undefined, many(p), resto1);
-      if (match$1.tag) {
-        return /* Success */Block.__(0, [
-                  /* :: */[
-                    valor1,
-                    /* [] */0
-                  ],
-                  resto1
-                ]);
-      } else {
-        return /* Success */Block.__(0, [
-                  List.append(/* :: */[
-                        valor1,
-                        /* [] */0
-                      ], match$1[0]),
-                  match$1[1]
-                ]);
-      }
-    }
+  var innerFn = function (cadena, k) {
+    return run(p, cadena, (function (param) {
+                  if (param.tag) {
+                    return Curry._1(k, /* Success */Block.__(0, [
+                                  /* [] */0,
+                                  cadena
+                                ]));
+                  } else {
+                    var resto1 = param[1];
+                    var valor1 = param[0];
+                    return run(many(p), resto1, (function (param) {
+                                  if (param.tag) {
+                                    return Curry._1(k, /* Success */Block.__(0, [
+                                                  /* :: */[
+                                                    valor1,
+                                                    /* [] */0
+                                                  ],
+                                                  resto1
+                                                ]));
+                                  } else {
+                                    return Curry._1(k, /* Success */Block.__(0, [
+                                                  List.append(/* :: */[
+                                                        valor1,
+                                                        /* [] */0
+                                                      ], param[0]),
+                                                  param[1]
+                                                ]));
+                                  }
+                                }));
+                  }
+                }));
   };
   return /* Parser */[innerFn];
 }
 
 function many1(p) {
-  var innerFn = function (cadena) {
-    var f = run(undefined, p, cadena);
-    if (f.tag) {
-      return f;
-    } else {
-      var resto1 = f[1];
-      var valor1 = f[0];
-      var match = run(undefined, many(p), resto1);
-      if (match.tag) {
-        return /* Success */Block.__(0, [
-                  /* :: */[
-                    valor1,
-                    /* [] */0
-                  ],
-                  resto1
-                ]);
-      } else {
-        return /* Success */Block.__(0, [
-                  List.append(/* :: */[
-                        valor1,
-                        /* [] */0
-                      ], match[0]),
-                  match[1]
-                ]);
-      }
-    }
+  var innerFn = function (cadena, k) {
+    return run(p, cadena, (function (f) {
+                  if (f.tag) {
+                    return Curry._1(k, f);
+                  } else {
+                    var resto1 = f[1];
+                    var valor1 = f[0];
+                    return run(many(p), resto1, (function (param) {
+                                  if (param.tag) {
+                                    return Curry._1(k, /* Success */Block.__(0, [
+                                                  /* :: */[
+                                                    valor1,
+                                                    /* [] */0
+                                                  ],
+                                                  resto1
+                                                ]));
+                                  } else {
+                                    return Curry._1(k, /* Success */Block.__(0, [
+                                                  List.append(/* :: */[
+                                                        valor1,
+                                                        /* [] */0
+                                                      ], param[0]),
+                                                  param[1]
+                                                ]));
+                                  }
+                                }));
+                  }
+                }));
   };
   return /* Parser */[innerFn];
 }
 
 function optional(p) {
-  var innerFn = function (cadena) {
-    var match = run(undefined, p, cadena);
-    if (match.tag) {
-      return /* Success */Block.__(0, [
-                undefined,
-                cadena
-              ]);
-    } else {
-      return /* Success */Block.__(0, [
-                Caml_option.some(match[0]),
-                match[1]
-              ]);
-    }
+  var innerFn = function (cadena, k) {
+    return run(p, cadena, (function (param) {
+                  if (param.tag) {
+                    return Curry._1(k, /* Success */Block.__(0, [
+                                  undefined,
+                                  cadena
+                                ]));
+                  } else {
+                    return Curry._1(k, /* Success */Block.__(0, [
+                                  Caml_option.some(param[0]),
+                                  param[1]
+                                ]));
+                  }
+                }));
   };
   return /* Parser */[innerFn];
 }
 
 function skip(p) {
-  var innerFn = function (cadena) {
-    var f = run(undefined, p, cadena);
-    if (f.tag) {
-      return f;
-    } else {
-      return /* Success */Block.__(0, [
-                /* () */0,
-                f[1]
-              ]);
-    }
+  var innerFn = function (cadena, k) {
+    return run(p, cadena, (function (f) {
+                  if (f.tag) {
+                    return Curry._1(k, f);
+                  } else {
+                    return Curry._1(k, /* Success */Block.__(0, [
+                                  /* () */0,
+                                  f[1]
+                                ]));
+                  }
+                }));
   };
   return /* Parser */[innerFn];
 }
@@ -336,7 +347,8 @@ var intP = parserMap((function (arreglo) {
       }), digits);
 
 var ParserC = /* module */[
-  /* identity */identity,
+  /* compose */compose,
+  /* -| */compose,
   /* run */run,
   /* parseChar */parseChar,
   /* parseNotChar */parseNotChar,
@@ -368,8 +380,12 @@ var ParserC = /* module */[
   /* intP */intP
 ];
 
-var miko = run(undefined, parserAnd(intP, optional(parseChar(";"))), "23;");
+run(parserMap((function (param) {
+            return $$Array.of_list(param).join("");
+          }), keepLeft(digits, parseChar(";"))), "2385;45687", (function (prim) {
+        console.log(prim);
+        return /* () */0;
+      }));
 
 exports.ParserC = ParserC;
-exports.miko = miko;
 /* digit Not a pure module */
