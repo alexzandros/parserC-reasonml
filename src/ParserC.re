@@ -3,25 +3,29 @@ module ParserC = {
     | Success ('a, string)
     | Failure (string, string);
 
-    type parser ('a) = Parser(string => parseResult('a))
+    type parser ('a) = Parser(string => (parseResult('a) => unit) => unit)
 
-    let run = (parser, cadena) => 
+    let i = x => ()
+
+    let run = (~k=i, parser, cadena) => 
     switch(parser) {
-    | Parser(fn) => fn(cadena)
+    | Parser(fn) => fn(cadena, k)
     }
 
     let parseChar = caracter =>{
-    let innerFn = cadena => String.(
-    switch (length(cadena)) {
-    | 0 => Failure("Final de la cadena", cadena)
-    | _ => let car1 = sub(cadena, 0,1)
-            let resto = sub(cadena, 1, length(cadena) - 1)
-        if (car1 == caracter) 
-            Success(caracter, resto)
-        else 
-        Failure({j|Esperaba $caracter y obtuve $car1|j}, cadena);
-    })
-    Parser(innerFn)
+        let innerFn = (cadena, k) => {
+            open String;
+            switch (length(cadena)) {
+            | 0 => k(Failure("Final de la cadena", cadena))
+            | _ => let car1 = sub(cadena, 0,1)
+                    let resto = sub(cadena, 1, length(cadena) - 1)
+                if (car1 == caracter) 
+                    k(Success(caracter, resto))
+                else 
+                k(Failure({j|Esperaba $caracter y obtuve $car1|j}, cadena))
+            }
+        }
+        Parser(innerFn)
     }
 
     let parseNotChar = caracter =>{

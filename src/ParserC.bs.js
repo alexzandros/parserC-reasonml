@@ -10,7 +10,11 @@ var Pervasives = require("bs-platform/lib/js/pervasives.js");
 var Caml_format = require("bs-platform/lib/js/caml_format.js");
 var Caml_option = require("bs-platform/lib/js/caml_option.js");
 
-function run(parser, cadena) {
+function identity(x) {
+  return x;
+}
+
+function run($staropt$star, parser, cadena) {
   return Curry._1(parser[0], cadena);
 }
 
@@ -92,9 +96,9 @@ function parserOr(p1, p2) {
   var innerFn = function (cadena) {
     var match = cadena.length;
     if (match !== 0) {
-      var s1 = run(p1, cadena);
+      var s1 = run(undefined, p1, cadena);
       if (s1.tag) {
-        return run(p2, cadena);
+        return run(undefined, p2, cadena);
       } else {
         return s1;
       }
@@ -112,11 +116,11 @@ function parserAnd(p1, p2) {
   var innerFn = function (cadena) {
     var match = cadena.length;
     if (match !== 0) {
-      var e1 = run(p1, cadena);
+      var e1 = run(undefined, p1, cadena);
       if (e1.tag) {
         return e1;
       } else {
-        var e1$1 = run(p2, e1[1]);
+        var e1$1 = run(undefined, p2, e1[1]);
         if (e1$1.tag) {
           return e1$1;
         } else {
@@ -143,7 +147,7 @@ function parserMap(fn, p) {
   var innerFn = function (cadena) {
     var match = cadena.length;
     if (match !== 0) {
-      var e1 = run(p, cadena);
+      var e1 = run(undefined, p, cadena);
       if (e1.tag) {
         return e1;
       } else {
@@ -213,7 +217,7 @@ function lift2(f, xP, yP) {
 
 function many(p) {
   var innerFn = function (cadena) {
-    var match = run(p, cadena);
+    var match = run(undefined, p, cadena);
     if (match.tag) {
       return /* Success */Block.__(0, [
                 /* [] */0,
@@ -222,7 +226,7 @@ function many(p) {
     } else {
       var resto1 = match[1];
       var valor1 = match[0];
-      var match$1 = run(many(p), resto1);
+      var match$1 = run(undefined, many(p), resto1);
       if (match$1.tag) {
         return /* Success */Block.__(0, [
                   /* :: */[
@@ -247,13 +251,13 @@ function many(p) {
 
 function many1(p) {
   var innerFn = function (cadena) {
-    var f = run(p, cadena);
+    var f = run(undefined, p, cadena);
     if (f.tag) {
       return f;
     } else {
       var resto1 = f[1];
       var valor1 = f[0];
-      var match = run(many(p), resto1);
+      var match = run(undefined, many(p), resto1);
       if (match.tag) {
         return /* Success */Block.__(0, [
                   /* :: */[
@@ -278,7 +282,7 @@ function many1(p) {
 
 function optional(p) {
   var innerFn = function (cadena) {
-    var match = run(p, cadena);
+    var match = run(undefined, p, cadena);
     if (match.tag) {
       return /* Success */Block.__(0, [
                 undefined,
@@ -296,7 +300,7 @@ function optional(p) {
 
 function skip(p) {
   var innerFn = function (cadena) {
-    var f = run(p, cadena);
+    var f = run(undefined, p, cadena);
     if (f.tag) {
       return f;
     } else {
@@ -332,6 +336,7 @@ var intP = parserMap((function (arreglo) {
       }), digits);
 
 var ParserC = /* module */[
+  /* identity */identity,
   /* run */run,
   /* parseChar */parseChar,
   /* parseNotChar */parseNotChar,
@@ -363,7 +368,7 @@ var ParserC = /* module */[
   /* intP */intP
 ];
 
-var miko = run(parserAnd(intP, optional(parseChar(";"))), "23;");
+var miko = run(undefined, parserAnd(intP, optional(parseChar(";"))), "23;");
 
 exports.ParserC = ParserC;
 exports.miko = miko;
