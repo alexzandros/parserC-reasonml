@@ -6,6 +6,7 @@ var $$Array = require("bs-platform/lib/js/array.js");
 var Block = require("bs-platform/lib/js/block.js");
 var Curry = require("bs-platform/lib/js/curry.js");
 var $$String = require("bs-platform/lib/js/string.js");
+var Caml_int32 = require("bs-platform/lib/js/caml_int32.js");
 var Pervasives = require("bs-platform/lib/js/pervasives.js");
 var Caml_format = require("bs-platform/lib/js/caml_format.js");
 var Caml_option = require("bs-platform/lib/js/caml_option.js");
@@ -25,18 +26,18 @@ function parseChar(caracter) {
       var car1 = $$String.sub(cadena, 0, 1);
       var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
       if (car1 === caracter) {
-        return Curry._1(k, /* Success */Block.__(0, [
+        return Curry._1(k, /* Exito */Block.__(0, [
                       caracter,
                       resto
                     ]));
       } else {
-        return Curry._1(k, /* Failure */Block.__(1, [
+        return Curry._1(k, /* Fallo */Block.__(1, [
                       "Esperaba " + (String(caracter) + (" y obtuve " + (String(car1) + ""))),
                       cadena
                     ]));
       }
     } else {
-      return Curry._1(k, /* Failure */Block.__(1, [
+      return Curry._1(k, /* Fallo */Block.__(1, [
                     "Final de la cadena",
                     cadena
                   ]));
@@ -52,18 +53,18 @@ function parseNotChar(caracter) {
       var car1 = $$String.sub(cadena, 0, 1);
       var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
       if (car1 !== caracter) {
-        return Curry._1(k, /* Success */Block.__(0, [
+        return Curry._1(k, /* Exito */Block.__(0, [
                       car1,
                       resto
                     ]));
       } else {
-        return Curry._1(k, /* Failure */Block.__(1, [
+        return Curry._1(k, /* Fallo */Block.__(1, [
                       "No Esperaba " + (String(caracter) + " "),
                       cadena
                     ]));
       }
     } else {
-      return Curry._1(k, /* Failure */Block.__(1, [
+      return Curry._1(k, /* Fallo */Block.__(1, [
                     "Final de la cadena",
                     cadena
                   ]));
@@ -78,12 +79,12 @@ function parserAny(param) {
     if (match !== 0) {
       var car1 = $$String.sub(cadena, 0, 1);
       var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
-      return Curry._1(k, /* Success */Block.__(0, [
+      return Curry._1(k, /* Exito */Block.__(0, [
                     car1,
                     resto
                   ]));
     } else {
-      return Curry._1(k, /* Failure */Block.__(1, [
+      return Curry._1(k, /* Fallo */Block.__(1, [
                     "Final de la cadena",
                     cadena
                   ]));
@@ -104,7 +105,7 @@ function parserOr(p1, p2) {
                     }
                   }));
     } else {
-      return Curry._1(k, /* Failure */Block.__(1, [
+      return Curry._1(k, /* Fallo */Block.__(1, [
                     "Final de la cadena",
                     cadena
                   ]));
@@ -126,7 +127,7 @@ function parserAnd(p1, p2) {
                                     if (e1.tag) {
                                       return Curry._1(k, e1);
                                     } else {
-                                      return Curry._1(k, /* Success */Block.__(0, [
+                                      return Curry._1(k, /* Exito */Block.__(0, [
                                                     /* tuple */[
                                                       valor1,
                                                       e1[0]
@@ -138,7 +139,7 @@ function parserAnd(p1, p2) {
                     }
                   }));
     } else {
-      return Curry._1(k, /* Failure */Block.__(1, [
+      return Curry._1(k, /* Fallo */Block.__(1, [
                     "Final de la cadena",
                     cadena
                   ]));
@@ -155,14 +156,14 @@ function parserMap(fn, p) {
                     if (e1.tag) {
                       return Curry._1(k, e1);
                     } else {
-                      return Curry._1(k, /* Success */Block.__(0, [
+                      return Curry._1(k, /* Exito */Block.__(0, [
                                     Curry._1(fn, e1[0]),
                                     e1[1]
                                   ]));
                     }
                   }));
     } else {
-      return Curry._1(k, /* Failure */Block.__(1, [
+      return Curry._1(k, /* Fallo */Block.__(1, [
                     "Final de la cadena",
                     cadena
                   ]));
@@ -173,7 +174,7 @@ function parserMap(fn, p) {
 
 function parserReturn(valor) {
   var innerFn = function (cadena, k) {
-    return Curry._1(k, /* Success */Block.__(0, [
+    return Curry._1(k, /* Exito */Block.__(0, [
                   valor,
                   cadena
                 ]));
@@ -224,7 +225,7 @@ function many(p) {
   var innerFn = function (cadena, k) {
     return run(p, cadena, (function (param) {
                   if (param.tag) {
-                    return Curry._1(k, /* Success */Block.__(0, [
+                    return Curry._1(k, /* Exito */Block.__(0, [
                                   /* [] */0,
                                   cadena
                                 ]));
@@ -233,7 +234,7 @@ function many(p) {
                     var valor1 = param[0];
                     return run(many(p), resto1, (function (param) {
                                   if (param.tag) {
-                                    return Curry._1(k, /* Success */Block.__(0, [
+                                    return Curry._1(k, /* Exito */Block.__(0, [
                                                   /* :: */[
                                                     valor1,
                                                     /* [] */0
@@ -241,7 +242,7 @@ function many(p) {
                                                   resto1
                                                 ]));
                                   } else {
-                                    return Curry._1(k, /* Success */Block.__(0, [
+                                    return Curry._1(k, /* Exito */Block.__(0, [
                                                   List.append(/* :: */[
                                                         valor1,
                                                         /* [] */0
@@ -266,7 +267,7 @@ function many1(p) {
                     var valor1 = f[0];
                     return run(many(p), resto1, (function (param) {
                                   if (param.tag) {
-                                    return Curry._1(k, /* Success */Block.__(0, [
+                                    return Curry._1(k, /* Exito */Block.__(0, [
                                                   /* :: */[
                                                     valor1,
                                                     /* [] */0
@@ -274,7 +275,7 @@ function many1(p) {
                                                   resto1
                                                 ]));
                                   } else {
-                                    return Curry._1(k, /* Success */Block.__(0, [
+                                    return Curry._1(k, /* Exito */Block.__(0, [
                                                   List.append(/* :: */[
                                                         valor1,
                                                         /* [] */0
@@ -293,12 +294,12 @@ function optional(p) {
   var innerFn = function (cadena, k) {
     return run(p, cadena, (function (param) {
                   if (param.tag) {
-                    return Curry._1(k, /* Success */Block.__(0, [
+                    return Curry._1(k, /* Exito */Block.__(0, [
                                   undefined,
                                   cadena
                                 ]));
                   } else {
-                    return Curry._1(k, /* Success */Block.__(0, [
+                    return Curry._1(k, /* Exito */Block.__(0, [
                                   Caml_option.some(param[0]),
                                   param[1]
                                 ]));
@@ -314,7 +315,7 @@ function skip(p) {
                   if (f.tag) {
                     return Curry._1(k, f);
                   } else {
-                    return Curry._1(k, /* Success */Block.__(0, [
+                    return Curry._1(k, /* Exito */Block.__(0, [
                                   /* () */0,
                                   f[1]
                                 ]));
@@ -338,13 +339,15 @@ function keepRight(p1, p2) {
 
 var digit = parserAnyOf("0123456789");
 
-keepRight(digit, digit);
-
 var digits = many1(digit);
 
-var intP = parserMap((function (arreglo) {
-        return Caml_format.caml_int_of_string($$Array.of_list(arreglo).join(""));
+var intP = parserMap((function (param) {
+        return Caml_format.caml_int_of_string($$Array.of_list(param).join(""));
       }), digits);
+
+var whitespace = parserAnyOf(" \t\n\r");
+
+var whitespaces = many(whitespace);
 
 var ParserC = /* module */[
   /* compose */compose,
@@ -377,15 +380,118 @@ var ParserC = /* module */[
   /* ->> */keepRight,
   /* digit */digit,
   /* digits */digits,
-  /* intP */intP
+  /* intP */intP,
+  /* whitespace */whitespace,
+  /* whitespaces */whitespaces
 ];
 
-run(parserMap((function (param) {
-            return $$Array.of_list(param).join("");
-          }), keepLeft(digits, parseChar(";"))), "2385;45687", (function (prim) {
-        console.log(prim);
+function mcd(_a, _b) {
+  while(true) {
+    var b = _b;
+    var a = _a;
+    var r = Caml_int32.mod_(a, b);
+    if (r !== 0) {
+      _b = r;
+      _a = b;
+      continue ;
+    } else {
+      return b;
+    }
+  };
+}
+
+function mcm(a, b) {
+  return Caml_int32.div(Caml_int32.imul(a, b), mcd(a, b));
+}
+
+function crearFraccion(numerador, denominador) {
+  return /* record */[
+          /* numerador */Caml_int32.div(numerador, mcd(numerador, denominador)),
+          /* denominador */Caml_int32.div(denominador, mcd(numerador, denominador))
+        ];
+}
+
+function $plus$slash(f1, f2) {
+  var denominador = mcm(f1[/* denominador */1], f2[/* denominador */1]);
+  var num1 = Caml_int32.div(Caml_int32.imul(f1[/* numerador */0], denominador), f1[/* denominador */1]);
+  var num2 = Caml_int32.div(Caml_int32.imul(f2[/* numerador */0], denominador), f2[/* denominador */1]);
+  var numerador = num1 + num2 | 0;
+  return crearFraccion(numerador, denominador);
+}
+
+function $neg$slash(f1, f2) {
+  var denominador = mcm(f1[/* denominador */1], f2[/* denominador */1]);
+  var num1 = Caml_int32.div(Caml_int32.imul(f1[/* numerador */0], denominador), f1[/* denominador */1]);
+  var num2 = Caml_int32.div(Caml_int32.imul(f2[/* numerador */0], denominador), f2[/* denominador */1]);
+  var numerador = num1 - num2 | 0;
+  return crearFraccion(numerador, denominador);
+}
+
+function $star$slash(f1, f2) {
+  var numerador = Caml_int32.imul(f1[/* numerador */0], f2[/* numerador */0]);
+  var denominador = Caml_int32.imul(f1[/* denominador */1], f2[/* denominador */1]);
+  return crearFraccion(numerador, denominador);
+}
+
+function $slash$slash(f1, f2) {
+  var numerador = Caml_int32.imul(f1[/* numerador */0], f2[/* denominador */1]);
+  var denominador = Caml_int32.imul(f1[/* denominador */1], f2[/* numerador */0]);
+  return crearFraccion(numerador, denominador);
+}
+
+function string_of_frac(f) {
+  return String(f[/* numerador */0]) + ("/" + String(f[/* denominador */1]));
+}
+
+var operador = parserMap((function (param) {
+        switch (param) {
+          case "*" : 
+              return /* Times */2;
+          case "+" : 
+              return /* Plus */0;
+          case "-" : 
+              return /* Minus */1;
+          default:
+            return /* DividedBy */3;
+        }
+      }), keepLeft(keepRight(whitespaces, parserAnyOf("/*-+")), whitespaces));
+
+var parseFrac = parserMap((function (param) {
+        return crearFraccion(param[0], param[1]);
+      }), parserAnd(keepLeft(intP, parseChar("/")), intP));
+
+var operaFrac = parserMap((function (param) {
+        var f2 = param[1];
+        var match = param[0];
+        var f1 = match[0];
+        switch (match[1]) {
+          case 0 : 
+              return $plus$slash(f1, f2);
+          case 1 : 
+              return $neg$slash(f1, f2);
+          case 2 : 
+              return $star$slash(f1, f2);
+          case 3 : 
+              return $slash$slash(f1, f2);
+          
+        }
+      }), parserAnd(parserAnd(parseFrac, operador), parseFrac));
+
+run(parserMap(string_of_frac, operaFrac), "8/5+2/4", (function (param) {
+        console.log(param[0]);
         return /* () */0;
       }));
 
 exports.ParserC = ParserC;
+exports.mcd = mcd;
+exports.mcm = mcm;
+exports.crearFraccion = crearFraccion;
+exports.$plus$slash = $plus$slash;
+exports.$neg$slash = $neg$slash;
+exports.$star$slash = $star$slash;
+exports.$slash$slash = $slash$slash;
+exports.string_of_frac = string_of_frac;
+exports.operador = operador;
+exports.parseFrac = parseFrac;
+exports.operaFrac = operaFrac;
 /* digit Not a pure module */
