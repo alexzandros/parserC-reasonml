@@ -1,309 +1,213 @@
-module ParserC = {
-    type parseResult ('a) = 
-    | Exito ('a, string)
-    | Fallo (string, string);
+type parseResult ('a) = 
+| Exito ('a, string)
+| Fallo (string, string);
 
-    type parser ('a) = Parser(string => (parseResult('a) => unit) => unit)
+type parser ('a) = Parser(string => (parseResult('a) => unit) => unit)
 
-    let compose = (f, g) =>
-        x => g(f(x))
+let compose = (f, g) =>
+    x => g(f(x))
 
-    let ( -| ) = compose
+let ( -| ) = compose
 
-    let run = (parser, cadena, k) => 
-    switch(parser) {
-    | Parser(fn) => fn(cadena, k)
-    }
+let run = (parser, cadena, k) => 
+switch(parser) {
+| Parser(fn) => fn(cadena, k)
+}
 
-    let parseChar = caracter =>{
-        let innerFn = (cadena, k) => {
-            String.(
-            switch (length(cadena)) {
-            | 0 => k(Fallo("Final de la cadena", cadena))
-            | _ => let car1 = sub(cadena, 0,1)
-                    let resto = sub(cadena, 1, length(cadena) - 1)
-                if (car1 == caracter) 
-                    k(Exito(caracter, resto))
-                else 
-                k(Fallo({j|Esperaba $caracter y obtuve $car1|j}, cadena))
-            })
-        }
-        Parser(innerFn)
-    }
-
-    let parseNotChar = caracter =>{
+let parseChar = caracter =>{
     let innerFn = (cadena, k) => {
         String.(
         switch (length(cadena)) {
         | 0 => k(Fallo("Final de la cadena", cadena))
         | _ => let car1 = sub(cadena, 0,1)
                 let resto = sub(cadena, 1, length(cadena) - 1)
-            if (car1 != caracter) 
-                k(Exito(car1, resto))
+            if (car1 == caracter) 
+                k(Exito(caracter, resto))
             else 
-            k(Fallo({j|No Esperaba $caracter |j}, cadena))
-    })}
-    Parser(innerFn)
+            k(Fallo({j|Esperaba $caracter y obtuve $car1|j}, cadena))
+        })
     }
+    Parser(innerFn)
+}
 
-    let parserAny: unit => parser(string) = () =>{
-    let innerFn = (cadena, k) => {
+let parseNotChar = caracter =>{
+let innerFn = (cadena, k) => {
+    String.(
+    switch (length(cadena)) {
+    | 0 => k(Fallo("Final de la cadena", cadena))
+    | _ => let car1 = sub(cadena, 0,1)
+            let resto = sub(cadena, 1, length(cadena) - 1)
+        if (car1 != caracter) 
+            k(Exito(car1, resto))
+        else 
+        k(Fallo({j|No Esperaba $caracter |j}, cadena))
+})}
+Parser(innerFn)
+}
+
+let parserAny: unit => parser(string) = () =>{
+let innerFn = (cadena, k) => {
+    String.(
+        switch (length(cadena)) {
+        | 0 => k(Fallo("Final de la cadena", cadena))
+        | _ => let car1 = sub(cadena, 0,1)
+                let resto = sub(cadena, 1, length(cadena) - 1)
+                k(Exito(car1, resto))
+    })}
+Parser(innerFn)
+}
+
+let parserOr = (p1, p2) =>{
+    let innerFn = (cadena, k) => 
+        String.(
+        switch (length(cadena)) {
+        | 0 => k(Fallo("Final de la cadena", cadena))
+        | _ => run (p1, cadena,
+                    fun 
+                    | Exito(_) as s1 => k(s1)
+                    | Fallo(_) => run (p2, cadena, k))
+        })
+    Parser(innerFn)
+}
+
+let ( <|> ) = parserOr
+
+let parserAnd = (p1, p2) => {
+    let innerFn = (cadena, k) => 
+        String.(
+        switch (length(cadena)) {
+        | 0 => k(Fallo("Final de la cadena", cadena))
+        | _ => run (p1, cadena,
+                    fun
+                    | Exito(valor1, resto1) =>
+                        run (p2, resto1,
+                            fun 
+                            | Exito (valor2, resto2) => k(Exito((valor1, valor2) , resto2))
+                            | Fallo (_, _) as e1 => k(e1))
+                    | Fallo(_, _) as e1 => k(e1))
+            
+        })
+Parser(innerFn)
+}
+
+let ( >-> ) = parserAnd;
+
+let parserMap = (fn, p) => {
+    let innerFn = (cadena, k) => 
         String.(
             switch (length(cadena)) {
             | 0 => k(Fallo("Final de la cadena", cadena))
-            | _ => let car1 = sub(cadena, 0,1)
-                    let resto = sub(cadena, 1, length(cadena) - 1)
-                    k(Exito(car1, resto))
-        })}
-    Parser(innerFn)
-    }
-
-    let parserOr = (p1, p2) =>{
-        let innerFn = (cadena, k) => 
-            String.(
-            switch (length(cadena)) {
-            | 0 => k(Fallo("Final de la cadena", cadena))
-            | _ => run (p1, cadena,
-                        fun 
-                        | Exito(_) as s1 => k(s1)
-                        | Fallo(_) => run (p2, cadena, k))
-            })
-        Parser(innerFn)
-    }
-
-    let ( <|> ) = parserOr
-
-    let parserAnd = (p1, p2) => {
-        let innerFn = (cadena, k) => 
-            String.(
-            switch (length(cadena)) {
-            | 0 => k(Fallo("Final de la cadena", cadena))
-            | _ => run (p1, cadena,
+            | _ =>
+                    run(p, cadena, 
                         fun
-                        | Exito(valor1, resto1) =>
-                            run (p2, resto1,
-                                fun 
-                                | Exito (valor2, resto2) => k(Exito((valor1, valor2) , resto2))
-                                | Fallo (_, _) as e1 => k(e1))
-                        | Fallo(_, _) as e1 => k(e1))
-                
+                        | Exito(valor, resto) => k(Exito(fn(valor), resto))
+                        | Fallo(_,_) as e1 => k(e1))
             })
     Parser(innerFn)
-    }
+};
 
-    let ( >-> ) = parserAnd;
+let ( <@> ) = parserMap
 
-    let parserMap = (fn, p) => {
-        let innerFn = (cadena, k) => 
-            String.(
-                switch (length(cadena)) {
-                | 0 => k(Fallo("Final de la cadena", cadena))
-                | _ =>
-                        run(p, cadena, 
-                            fun
-                            | Exito(valor, resto) => k(Exito(fn(valor), resto))
-                            | Fallo(_,_) as e1 => k(e1))
-                })
-        Parser(innerFn)
-    };
+let parserReturn = valor => {
+    let innerFn = (cadena, k) => 
+        k(Exito(valor, cadena))
+    Parser(innerFn)
+}
 
-    let ( <@> ) = parserMap
+let parserApply = (fP, xP) => 
+        (((f,x)) => f(x)) <@> (fP >-> xP)
 
-    let parserReturn = valor => {
-        let innerFn = (cadena, k) => 
-            k(Exito(valor, cadena))
-        Parser(innerFn)
-    }
+let ( <*> ) = parserApply
 
-    let parserApply = (fP, xP) => 
-         (((f,x)) => f(x)) <@> (fP >-> xP)
+let parserChoice = (lista) => List.(
+    fold_left(parserOr, hd(lista), tl(lista)));
 
-    let ( <*> ) = parserApply
+let parserAll = lista => {
+    let concatResults = (p1, p2) =>
+        p1 >-> p2
+        |> parserMap(((l1, l2)) => l1@l2);
+    let lista2 = lista |> List.map (parserMap(p1=>[p1]))
+    List.tl(lista2)
+    |> List.fold_left (concatResults, List.hd(lista2) )
+}
 
-    let parserChoice = (lista) => List.(
-        fold_left(parserOr, hd(lista), tl(lista)));
+let parserAnyOf = cadena =>
+Js.String.split("", cadena)
+|> Array.to_list
+|> List.map(parseChar)
+|> parserChoice
 
-    let parserAll = lista => {
-        let concatResults = (p1, p2) =>
-            p1 >-> p2
-            |> parserMap(((l1, l2)) => l1@l2);
-        let lista2 = lista |> List.map (parserMap(p1=>[p1]))
-        List.tl(lista2)
-        |> List.fold_left (concatResults, List.hd(lista2) )
-    }
+let parseString = cadena => 
+Js.String.split("", cadena)
+|> Array.to_list
+|> List.map(parseChar)
+|> parserAll
 
-    let parserAnyOf = cadena =>
-    Js.String.split("", cadena)
-    |> Array.to_list
-    |> List.map(parseChar)
-    |> parserChoice
+let lift2 = (f, xP, yP) => 
+    parserReturn(f) <*> xP <*> yP
 
-    let parseString = cadena => 
-    Js.String.split("", cadena)
-    |> Array.to_list
-    |> List.map(parseChar)
-    |> parserAll
-
-    let lift2 = (f, xP, yP) => 
-        parserReturn(f) <*> xP <*> yP
-
-    let rec many = p => {
-        let innerFn = (cadena, k) => 
-            run(p, cadena,
-                fun
-                | Fallo (_) => k(Exito([], cadena))
-                | Exito (valor1,resto1)  => 
-                    run(many(p),resto1,
-                        fun
-                        | Exito (valor2,resto2) => k(Exito(List.append([valor1], valor2), resto2))
-                        | Fallo(_) => k(Exito ([valor1], resto1))))
-        Parser(innerFn)
-    }
-
-    let many1 = p => {
-        let innerFn = (cadena, k) => 
-            run(p, cadena,
-                fun
-                | Fallo (_) as f => k(f)
-                | Exito (valor1,resto1)  => 
-                    run(many(p),resto1,
-                        fun
-                        | Exito (valor2,resto2) => k(Exito(List.append([valor1], valor2), resto2))
-                        | Fallo(_) => k(Exito([valor1], resto1))))
-        Parser(innerFn)
-    }
-
-    let optional = (p) => {
-        let innerFn = (cadena, k) => 
-            run (p, cadena,
+let rec many = p => {
+    let innerFn = (cadena, k) => 
+        run(p, cadena,
+            fun
+            | Fallo (_) => k(Exito([], cadena))
+            | Exito (valor1,resto1)  => 
+                run(many(p),resto1,
                     fun
-                    | Exito(v1,r1) => k(Exito(Some(v1), r1))
-                    | Fallo(_) => k(Exito(None, cadena)))
-        Parser(innerFn)
-    }
+                    | Exito (valor2,resto2) => k(Exito(List.append([valor1], valor2), resto2))
+                    | Fallo(_) => k(Exito ([valor1], resto1))))
+    Parser(innerFn)
+}
 
-    let skip = p => {
-        let innerFn = (cadena, k) => 
-            run(p, cadena,
+let many1 = p => {
+    let innerFn = (cadena, k) => 
+        run(p, cadena,
+            fun
+            | Fallo (_) as f => k(f)
+            | Exito (valor1,resto1)  => 
+                run(many(p),resto1,
+                    fun
+                    | Exito (valor2,resto2) => k(Exito(List.append([valor1], valor2), resto2))
+                    | Fallo(_) => k(Exito([valor1], resto1))))
+    Parser(innerFn)
+}
+
+let optional = (p) => {
+    let innerFn = (cadena, k) => 
+        run (p, cadena,
                 fun
-                | Exito(_v1, r1) => k(Exito((), r1))
-                | Fallo(_) as f => k(f))
-        Parser(innerFn)
-    }
-
-    let keepLeft = (p1,p2) => {
-        p1 >-> p2
-        |> parserMap (((a,_b)) => a)
-    }
-    
-    let keepRight = (p1,p2) => {
-        p1 >-> p2
-        |> parserMap (((_a,b)) => b)
-    }
-
-    let ( -<< ) = keepLeft
-
-    let ( ->> ) = keepRight;
-
-    let digit = parserAnyOf("0123456789");
-
-    let digits = many1(digit)
-
-    let intP = {Array.of_list -| Js.Array.joinWith("") -| int_of_string } <@> digits
-
-    let whitespace = parserAnyOf("\ \t\n\r")
-
-    let whitespaces = many(whitespace)
-};
-
-open ParserC;
-
-type fraccionario = {
-    numerador:int,
-    denominador: int
-};
-
-type operador = 
-  | Plus
-  | Minus
-  | Times
-  | DividedBy;
-
-let rec mcd = (a, b) =>
-    switch (a mod b) {
-    | 0 => b
-    | r => mcd(b, r)
-    };
-
-let mcm = (a, b)  =>
-    a * b / mcd(a, b)
-
-let crearFraccion = (numerador, denominador) => {
-    numerador: numerador / mcd(numerador, denominador),
-    denominador: denominador / mcd(numerador, denominador)
+                | Exito(v1,r1) => k(Exito(Some(v1), r1))
+                | Fallo(_) => k(Exito(None, cadena)))
+    Parser(innerFn)
 }
 
-let ( +/ ) = (f1, f2) => {
-    let denominador = mcm(f1.denominador, f2.denominador);
-    let num1 = f1.numerador * denominador / f1.denominador;
-    let num2 = f2.numerador * denominador / f2.denominador;
-    let numerador = num1 + num2;
-    crearFraccion (numerador, denominador)
+let skip = p => {
+    let innerFn = (cadena, k) => 
+        run(p, cadena,
+            fun
+            | Exito(_v1, r1) => k(Exito((), r1))
+            | Fallo(_) as f => k(f))
+    Parser(innerFn)
 }
 
-let ( -/ ) = (f1, f2) => {
-    let denominador = mcm(f1.denominador, f2.denominador);
-    let num1 = f1.numerador * denominador / f1.denominador;
-    let num2 = f2.numerador * denominador / f2.denominador;
-    let numerador = num1 - num2;
-    crearFraccion (numerador, denominador)
-}
+let keepLeft = (p1,p2) =>
+    p1 >-> p2
+    |> parserMap (((a,_b)) => a)
 
-let ( *\/ ) = (f1, f2) => {
-    let numerador = f1.numerador * f2.numerador;
-    let denominador = f1.denominador * f2.denominador;
-    crearFraccion(numerador, denominador)
-}
+let keepRight = (p1,p2) => 
+    p1 >-> p2
+    |> parserMap (((_a,b)) => b)
 
-let ( /\/ ) = (f1, f2) => {
-    let numerador = f1.numerador * f2.denominador;
-    let denominador = f1.denominador * f2.numerador;
-    crearFraccion(numerador, denominador)
-}
+let ( -<< ) = keepLeft
 
-let string_of_frac = (f) =>
-    string_of_int(f.numerador) ++ "/" ++ string_of_int(f.denominador)
+let ( ->> ) = keepRight;
 
-let operador = 
-        {fun
-        | "+" => Plus
-        | "-" => Minus
-        | "*" => Times
-        | _ => DividedBy}
-        <@>
-        whitespaces ->> parserAnyOf("/*-+") -<< whitespaces
+let digit = parserAnyOf("0123456789");
 
-let parseFrac = 
-    {((n,d)) => crearFraccion(n,d)}
-    <@>
-    {(intP -<< parseChar("/")) >-> intP}
+let digits = many1(digit)
 
-let operaFrac =     
-    {(((f1, op), f2)) => 
-        switch (op) {
-        | Plus => f1 +/ f2
-        | Minus => f1 -/ f2
-        | Times => f1 *\/ f2
-        | DividedBy => f1 /\/ f2
-        };
-    }
-    <@>
-    (parseFrac >-> operador >-> parseFrac);
+let intP = {Array.of_list -| Js.Array.joinWith("") -| int_of_string } <@> digits
 
-run(string_of_frac <@> operaFrac, "8/5+2/4",
-    {
-        fun
-        | Exito(v,_) => v
-        | Fallo(e,_) => e
-    } -| Js.log)
-   
+let whitespace = parserAnyOf("\ \t\n\r")
+
+let whitespaces = many(whitespace)

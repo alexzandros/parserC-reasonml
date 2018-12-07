@@ -6,7 +6,6 @@ var $$Array = require("bs-platform/lib/js/array.js");
 var Block = require("bs-platform/lib/js/block.js");
 var Curry = require("bs-platform/lib/js/curry.js");
 var $$String = require("bs-platform/lib/js/string.js");
-var Caml_int32 = require("bs-platform/lib/js/caml_int32.js");
 var Pervasives = require("bs-platform/lib/js/pervasives.js");
 var Caml_format = require("bs-platform/lib/js/caml_format.js");
 var Caml_option = require("bs-platform/lib/js/caml_option.js");
@@ -349,149 +348,51 @@ var whitespace = parserAnyOf(" \t\n\r");
 
 var whitespaces = many(whitespace);
 
-var ParserC = /* module */[
-  /* compose */compose,
-  /* -| */compose,
-  /* run */run,
-  /* parseChar */parseChar,
-  /* parseNotChar */parseNotChar,
-  /* parserAny */parserAny,
-  /* parserOr */parserOr,
-  /* <|> */parserOr,
-  /* parserAnd */parserAnd,
-  /* >-> */parserAnd,
-  /* parserMap */parserMap,
-  /* <@> */parserMap,
-  /* parserReturn */parserReturn,
-  /* parserApply */parserApply,
-  /* <*> */parserApply,
-  /* parserChoice */parserChoice,
-  /* parserAll */parserAll,
-  /* parserAnyOf */parserAnyOf,
-  /* parseString */parseString,
-  /* lift2 */lift2,
-  /* many */many,
-  /* many1 */many1,
-  /* optional */optional,
-  /* skip */skip,
-  /* keepLeft */keepLeft,
-  /* keepRight */keepRight,
-  /* -<< */keepLeft,
-  /* ->> */keepRight,
-  /* digit */digit,
-  /* digits */digits,
-  /* intP */intP,
-  /* whitespace */whitespace,
-  /* whitespaces */whitespaces
-];
+var $neg$pipe = compose;
 
-function mcd(_a, _b) {
-  while(true) {
-    var b = _b;
-    var a = _a;
-    var r = Caml_int32.mod_(a, b);
-    if (r !== 0) {
-      _b = r;
-      _a = b;
-      continue ;
-    } else {
-      return b;
-    }
-  };
-}
+var $less$pipe$great = parserOr;
 
-function mcm(a, b) {
-  return Caml_int32.div(Caml_int32.imul(a, b), mcd(a, b));
-}
+var $great$neg$great = parserAnd;
 
-function crearFraccion(numerador, denominador) {
-  return /* record */[
-          /* numerador */Caml_int32.div(numerador, mcd(numerador, denominador)),
-          /* denominador */Caml_int32.div(denominador, mcd(numerador, denominador))
-        ];
-}
+var $less$at$great = parserMap;
 
-function $plus$slash(f1, f2) {
-  var denominador = mcm(f1[/* denominador */1], f2[/* denominador */1]);
-  var num1 = Caml_int32.div(Caml_int32.imul(f1[/* numerador */0], denominador), f1[/* denominador */1]);
-  var num2 = Caml_int32.div(Caml_int32.imul(f2[/* numerador */0], denominador), f2[/* denominador */1]);
-  var numerador = num1 + num2 | 0;
-  return crearFraccion(numerador, denominador);
-}
+var $less$star$great = parserApply;
 
-function $neg$slash(f1, f2) {
-  var denominador = mcm(f1[/* denominador */1], f2[/* denominador */1]);
-  var num1 = Caml_int32.div(Caml_int32.imul(f1[/* numerador */0], denominador), f1[/* denominador */1]);
-  var num2 = Caml_int32.div(Caml_int32.imul(f2[/* numerador */0], denominador), f2[/* denominador */1]);
-  var numerador = num1 - num2 | 0;
-  return crearFraccion(numerador, denominador);
-}
+var $neg$less$less = keepLeft;
 
-function $star$slash(f1, f2) {
-  var numerador = Caml_int32.imul(f1[/* numerador */0], f2[/* numerador */0]);
-  var denominador = Caml_int32.imul(f1[/* denominador */1], f2[/* denominador */1]);
-  return crearFraccion(numerador, denominador);
-}
+var $neg$great$great = keepRight;
 
-function $slash$slash(f1, f2) {
-  var numerador = Caml_int32.imul(f1[/* numerador */0], f2[/* denominador */1]);
-  var denominador = Caml_int32.imul(f1[/* denominador */1], f2[/* numerador */0]);
-  return crearFraccion(numerador, denominador);
-}
-
-function string_of_frac(f) {
-  return String(f[/* numerador */0]) + ("/" + String(f[/* denominador */1]));
-}
-
-var operador = parserMap((function (param) {
-        switch (param) {
-          case "*" : 
-              return /* Times */2;
-          case "+" : 
-              return /* Plus */0;
-          case "-" : 
-              return /* Minus */1;
-          default:
-            return /* DividedBy */3;
-        }
-      }), keepLeft(keepRight(whitespaces, parserAnyOf("/*-+")), whitespaces));
-
-var parseFrac = parserMap((function (param) {
-        return crearFraccion(param[0], param[1]);
-      }), parserAnd(keepLeft(intP, parseChar("/")), intP));
-
-var operaFrac = parserMap((function (param) {
-        var f2 = param[1];
-        var match = param[0];
-        var f1 = match[0];
-        switch (match[1]) {
-          case 0 : 
-              return $plus$slash(f1, f2);
-          case 1 : 
-              return $neg$slash(f1, f2);
-          case 2 : 
-              return $star$slash(f1, f2);
-          case 3 : 
-              return $slash$slash(f1, f2);
-          
-        }
-      }), parserAnd(parserAnd(parseFrac, operador), parseFrac));
-
-run(parserMap(string_of_frac, operaFrac), "8/5+2/4", (function (param) {
-        console.log(param[0]);
-        return /* () */0;
-      }));
-
-exports.ParserC = ParserC;
-exports.mcd = mcd;
-exports.mcm = mcm;
-exports.crearFraccion = crearFraccion;
-exports.$plus$slash = $plus$slash;
-exports.$neg$slash = $neg$slash;
-exports.$star$slash = $star$slash;
-exports.$slash$slash = $slash$slash;
-exports.string_of_frac = string_of_frac;
-exports.operador = operador;
-exports.parseFrac = parseFrac;
-exports.operaFrac = operaFrac;
+exports.compose = compose;
+exports.$neg$pipe = $neg$pipe;
+exports.run = run;
+exports.parseChar = parseChar;
+exports.parseNotChar = parseNotChar;
+exports.parserAny = parserAny;
+exports.parserOr = parserOr;
+exports.$less$pipe$great = $less$pipe$great;
+exports.parserAnd = parserAnd;
+exports.$great$neg$great = $great$neg$great;
+exports.parserMap = parserMap;
+exports.$less$at$great = $less$at$great;
+exports.parserReturn = parserReturn;
+exports.parserApply = parserApply;
+exports.$less$star$great = $less$star$great;
+exports.parserChoice = parserChoice;
+exports.parserAll = parserAll;
+exports.parserAnyOf = parserAnyOf;
+exports.parseString = parseString;
+exports.lift2 = lift2;
+exports.many = many;
+exports.many1 = many1;
+exports.optional = optional;
+exports.skip = skip;
+exports.keepLeft = keepLeft;
+exports.keepRight = keepRight;
+exports.$neg$less$less = $neg$less$less;
+exports.$neg$great$great = $neg$great$great;
+exports.digit = digit;
+exports.digits = digits;
+exports.intP = intP;
+exports.whitespace = whitespace;
+exports.whitespaces = whitespaces;
 /* digit Not a pure module */
