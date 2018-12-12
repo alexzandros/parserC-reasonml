@@ -1,4 +1,4 @@
-module Fraccionario {
+/* module Fraccionario {
     open ParserC;
 
     type fraccionario = {
@@ -89,4 +89,4 @@ module Fraccionario {
             | Exito(v,_) => v
             | Fallo(e,_) => e
         } -| Js.log)
-}
+} */

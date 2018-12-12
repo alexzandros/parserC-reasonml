@@ -13,5 +13,11 @@
   "license": "MIT",
   "devDependencies": {
     "bs-platform": "^4.0.8"
+  },
+  "dependencies": {
+    "global": "^4.3.2",
+    "reason-cli": "^3.3.3-linux-1",
+    "webpack": "^4.27.1",
+    "webpack-cli": "^3.1.2"
   }
 }

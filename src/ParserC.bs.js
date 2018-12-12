@@ -6,9 +6,8 @@ var $$Array = require("bs-platform/lib/js/array.js");
 var Block = require("bs-platform/lib/js/block.js");
 var Curry = require("bs-platform/lib/js/curry.js");
 var $$String = require("bs-platform/lib/js/string.js");
-var Pervasives = require("bs-platform/lib/js/pervasives.js");
-var Caml_format = require("bs-platform/lib/js/caml_format.js");
-var Caml_option = require("bs-platform/lib/js/caml_option.js");
+var Hashtbl = require("bs-platform/lib/js/hashtbl.js");
+var Caml_builtin_exceptions = require("bs-platform/lib/js/caml_builtin_exceptions.js");
 
 function compose(f, g, x) {
   return Curry._1(g, Curry._1(f, x));
@@ -18,32 +17,272 @@ function run(parser, cadena, k) {
   return Curry._2(parser[0], cadena, k);
 }
 
-function parseChar(caracter) {
-  var innerFn = function (cadena, k) {
-    var match = cadena.length;
-    if (match !== 0) {
-      var car1 = $$String.sub(cadena, 0, 1);
-      var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
-      if (car1 === caracter) {
-        return Curry._1(k, /* Exito */Block.__(0, [
-                      caracter,
-                      resto
-                    ]));
-      } else {
-        return Curry._1(k, /* Fallo */Block.__(1, [
-                      "Esperaba " + (String(caracter) + (" y obtuve " + (String(car1) + ""))),
-                      cadena
-                    ]));
-      }
-    } else {
-      return Curry._1(k, /* Fallo */Block.__(1, [
-                    "Final de la cadena",
-                    cadena
-                  ]));
-    }
-  };
-  return /* Parser */[innerFn];
+function execParser(parser, cadena) {
+  var resultados = /* record */[/* contents : [] */0];
+  run(parser, cadena, (function (param) {
+          if (param.tag || param[1] !== "") {
+            return /* () */0;
+          } else {
+            resultados[0] = /* :: */[
+              param[0],
+              resultados[0]
+            ];
+            return /* () */0;
+          }
+        }));
+  return $$Array.of_list(resultados[0]);
 }
+
+function memo(fn) {
+  var tabla = Hashtbl.create(undefined, 10);
+  return (function (arg) {
+      try {
+        return Hashtbl.find(tabla, arg);
+      }
+      catch (exn){
+        if (exn === Caml_builtin_exceptions.not_found) {
+          var valor = Curry._1(fn, arg);
+          Hashtbl.add(tabla, arg, valor);
+          return valor;
+        } else {
+          throw exn;
+        }
+      }
+    });
+}
+
+function memo2(fn) {
+  var tabla = Hashtbl.create(undefined, 10);
+  return (function (arg1, arg2) {
+      try {
+        return Hashtbl.find(tabla, /* tuple */[
+                    arg1,
+                    arg2
+                  ]);
+      }
+      catch (exn){
+        if (exn === Caml_builtin_exceptions.not_found) {
+          var valor = Curry._2(fn, arg1, arg2);
+          Hashtbl.add(tabla, /* tuple */[
+                arg1,
+                arg2
+              ], valor);
+          return valor;
+        } else {
+          throw exn;
+        }
+      }
+    });
+}
+
+function memoCPS(fn) {
+  var tablaContinuaciones = Hashtbl.create(undefined, 10);
+  var tablaResultados = Hashtbl.create(undefined, 10);
+  return /* Parser */[(function (arg, k) {
+              var listadoContinuaciones;
+              try {
+                listadoContinuaciones = Hashtbl.find(tablaContinuaciones, arg);
+              }
+              catch (exn){
+                if (exn === Caml_builtin_exceptions.not_found) {
+                  listadoContinuaciones = /* [] */0;
+                } else {
+                  throw exn;
+                }
+              }
+              if (List.length(listadoContinuaciones) === 0) {
+                Hashtbl.add(tablaContinuaciones, arg, /* :: */[
+                      k,
+                      /* [] */0
+                    ]);
+                return run(fn, arg, (function (result) {
+                              try {
+                                Hashtbl.find(tablaResultados, arg);
+                                return /* () */0;
+                              }
+                              catch (exn){
+                                if (exn === Caml_builtin_exceptions.not_found) {
+                                  Hashtbl.add(tablaResultados, arg, result);
+                                  var exit = 0;
+                                  var lista;
+                                  try {
+                                    lista = Hashtbl.find(tablaContinuaciones, arg);
+                                    exit = 1;
+                                  }
+                                  catch (exn$1){
+                                    if (exn$1 === Caml_builtin_exceptions.not_found) {
+                                      return /* () */0;
+                                    } else {
+                                      throw exn$1;
+                                    }
+                                  }
+                                  if (exit === 1) {
+                                    return List.iter((function (cont) {
+                                                  return Curry._1(cont, result);
+                                                }), lista);
+                                  }
+                                  
+                                } else {
+                                  throw exn;
+                                }
+                              }
+                            }));
+              } else {
+                Hashtbl.replace(tablaContinuaciones, arg, /* :: */[
+                      k,
+                      listadoContinuaciones
+                    ]);
+                var exit = 0;
+                var valor;
+                try {
+                  valor = Hashtbl.find(tablaResultados, arg);
+                  exit = 1;
+                }
+                catch (exn$1){
+                  if (exn$1 === Caml_builtin_exceptions.not_found) {
+                    return /* () */0;
+                  } else {
+                    throw exn$1;
+                  }
+                }
+                if (exit === 1) {
+                  return Curry._1(k, valor);
+                }
+                
+              }
+            })];
+}
+
+function pushContinuation(tramp, parser, cadena, cont) {
+  var exit = 0;
+  var val;
+  try {
+    val = Hashtbl.find(tramp[/* tabla */0], /* tuple */[
+          parser,
+          cadena
+        ]);
+    exit = 1;
+  }
+  catch (exn){
+    if (exn === Caml_builtin_exceptions.not_found) {
+      Hashtbl.replace(tramp[/* tabla */0], /* tuple */[
+            parser,
+            cadena
+          ], /* tuple */[
+            /* [] */0,
+            /* :: */[
+              cont,
+              /* [] */0
+            ]
+          ]);
+      tramp[/* pila */1] = /* :: */[
+        /* tuple */[
+          parser,
+          cadena,
+          (function (result) {
+              var match = Hashtbl.find(tramp[/* tabla */0], /* tuple */[
+                    parser,
+                    cadena
+                  ]);
+              var continuaciones = match[1];
+              var resultados = match[0];
+              if (List.mem(result, resultados)) {
+                return 0;
+              } else {
+                Hashtbl.replace(tramp[/* tabla */0], /* tuple */[
+                      parser,
+                      cadena
+                    ], /* tuple */[
+                      /* :: */[
+                        result,
+                        resultados
+                      ],
+                      continuaciones
+                    ]);
+                return List.iter((function (c) {
+                              return Curry._1(c, result);
+                            }), continuaciones);
+              }
+            })
+        ],
+        tramp[/* pila */1]
+      ];
+      return /* () */0;
+    } else {
+      throw exn;
+    }
+  }
+  if (exit === 1) {
+    var resultados = val[0];
+    Hashtbl.replace(tramp[/* tabla */0], /* tuple */[
+          parser,
+          cadena
+        ], /* tuple */[
+          resultados,
+          /* :: */[
+            cont,
+            val[1]
+          ]
+        ]);
+    return List.iter(cont, resultados);
+  }
+  
+}
+
+var parseString = memo((function (patron) {
+        var innerFn = function (cadena, k) {
+          console.log("funcion parseString: " + (patron + (" " + cadena)));
+          var longPatron = patron.length;
+          var longCadena = cadena.length;
+          if (longPatron > longCadena) {
+            return Curry._1(k, /* Fallo */Block.__(1, [
+                          "Final de la cadena",
+                          cadena
+                        ]));
+          } else {
+            var subcadena = $$String.sub(cadena, 0, longPatron);
+            if (subcadena === patron) {
+              return Curry._1(k, /* Exito */Block.__(0, [
+                            subcadena,
+                            $$String.sub(cadena, longPatron, longCadena - longPatron | 0)
+                          ]));
+            } else {
+              return Curry._1(k, /* Fallo */Block.__(1, [
+                            "No esperado",
+                            cadena
+                          ]));
+            }
+          }
+        };
+        return memoCPS(/* Parser */[innerFn]);
+      }));
+
+var parseChar = memo((function (caracter) {
+        var innerFn = function (cadena, k) {
+          var match = cadena.length;
+          if (match !== 0) {
+            var car1 = $$String.sub(cadena, 0, 1);
+            var resto = $$String.sub(cadena, 1, cadena.length - 1 | 0);
+            if (car1 === caracter) {
+              return Curry._1(k, /* Exito */Block.__(0, [
+                            caracter,
+                            resto
+                          ]));
+            } else {
+              return Curry._1(k, /* Fallo */Block.__(1, [
+                            "Esperaba " + (String(caracter) + (" y obtuve " + (String(car1) + ""))),
+                            cadena
+                          ]));
+            }
+          } else {
+            return Curry._1(k, /* Fallo */Block.__(1, [
+                          "Final de la cadena",
+                          cadena
+                        ]));
+          }
+        };
+        return memoCPS(/* Parser */[innerFn]);
+      }));
 
 function parseNotChar(caracter) {
   var innerFn = function (cadena, k) {
@@ -92,261 +331,98 @@ function parserAny(param) {
   return /* Parser */[innerFn];
 }
 
-function parserOr(p1, p2) {
-  var innerFn = function (cadena, k) {
-    var match = cadena.length;
-    if (match !== 0) {
-      return run(p1, cadena, (function (s1) {
-                    if (s1.tag) {
-                      return run(p2, cadena, k);
-                    } else {
-                      return Curry._1(k, s1);
-                    }
-                  }));
-    } else {
-      return Curry._1(k, /* Fallo */Block.__(1, [
-                    "Final de la cadena",
-                    cadena
-                  ]));
-    }
-  };
-  return /* Parser */[innerFn];
-}
+var parserOr = memo2((function (p1, p2) {
+        var innerFn = function (cadena, k) {
+          var match = cadena.length;
+          if (match !== 0) {
+            run(p1, cadena, k);
+            return run(p2, cadena, k);
+          } else {
+            return Curry._1(k, /* Fallo */Block.__(1, [
+                          "Final de la cadena",
+                          cadena
+                        ]));
+          }
+        };
+        return memoCPS(/* Parser */[innerFn]);
+      }));
 
-function parserAnd(p1, p2) {
-  var innerFn = function (cadena, k) {
-    var match = cadena.length;
-    if (match !== 0) {
-      return run(p1, cadena, (function (e1) {
-                    if (e1.tag) {
-                      return Curry._1(k, e1);
-                    } else {
-                      var valor1 = e1[0];
-                      return run(p2, e1[1], (function (e1) {
-                                    if (e1.tag) {
-                                      return Curry._1(k, e1);
-                                    } else {
-                                      return Curry._1(k, /* Exito */Block.__(0, [
-                                                    /* tuple */[
-                                                      valor1,
-                                                      e1[0]
-                                                    ],
-                                                    e1[1]
-                                                  ]));
-                                    }
-                                  }));
-                    }
-                  }));
-    } else {
-      return Curry._1(k, /* Fallo */Block.__(1, [
-                    "Final de la cadena",
-                    cadena
-                  ]));
-    }
-  };
-  return /* Parser */[innerFn];
-}
+var parserAnd = memo2((function (p1, p2) {
+        var innerFn = function (cadena, k) {
+          var match = cadena.length;
+          if (match !== 0) {
+            return run(p1, cadena, (function (e1) {
+                          if (e1.tag) {
+                            return Curry._1(k, e1);
+                          } else {
+                            var valor1 = e1[0];
+                            return run(p2, e1[1], (function (e1) {
+                                          if (e1.tag) {
+                                            return Curry._1(k, e1);
+                                          } else {
+                                            return Curry._1(k, /* Exito */Block.__(0, [
+                                                          /* tuple */[
+                                                            valor1,
+                                                            e1[0]
+                                                          ],
+                                                          e1[1]
+                                                        ]));
+                                          }
+                                        }));
+                          }
+                        }));
+          } else {
+            return Curry._1(k, /* Fallo */Block.__(1, [
+                          "Final de la cadena",
+                          cadena
+                        ]));
+          }
+        };
+        return memoCPS(/* Parser */[innerFn]);
+      }));
 
-function parserMap(fn, p) {
-  var innerFn = function (cadena, k) {
-    var match = cadena.length;
-    if (match !== 0) {
-      return run(p, cadena, (function (e1) {
-                    if (e1.tag) {
-                      return Curry._1(k, e1);
-                    } else {
-                      return Curry._1(k, /* Exito */Block.__(0, [
-                                    Curry._1(fn, e1[0]),
-                                    e1[1]
-                                  ]));
-                    }
-                  }));
-    } else {
-      return Curry._1(k, /* Fallo */Block.__(1, [
-                    "Final de la cadena",
-                    cadena
-                  ]));
-    }
-  };
-  return /* Parser */[innerFn];
-}
+var parserMap = memo((function (fn, p) {
+        var innerFn = function (cadena, k) {
+          var match = cadena.length;
+          if (match !== 0) {
+            return run(p, cadena, (function (e1) {
+                          if (e1.tag) {
+                            return Curry._1(k, e1);
+                          } else {
+                            return Curry._1(k, /* Exito */Block.__(0, [
+                                          Curry._1(fn, e1[0]),
+                                          e1[1]
+                                        ]));
+                          }
+                        }));
+          } else {
+            return Curry._1(k, /* Fallo */Block.__(1, [
+                          "Final de la cadena",
+                          cadena
+                        ]));
+          }
+        };
+        return memoCPS(/* Parser */[innerFn]);
+      }));
 
-function parserReturn(valor) {
-  var innerFn = function (cadena, k) {
-    return Curry._1(k, /* Exito */Block.__(0, [
-                  valor,
-                  cadena
-                ]));
-  };
-  return /* Parser */[innerFn];
-}
+var miko = parserOr(parseString("carlos"), parseString("carlos rojas"));
 
-function parserApply(fP, xP) {
-  return parserMap((function (param) {
-                return Curry._1(param[0], param[1]);
-              }), parserAnd(fP, xP));
-}
+console.log(execParser(parseString("carlos rojas"), "carlos rojas"));
 
-function parserChoice(lista) {
-  return List.fold_left(parserOr, List.hd(lista), List.tl(lista));
-}
+run(miko, "carlos rojas c", (function (prim) {
+        console.log(prim);
+        return /* () */0;
+      }));
 
-function parserAll(lista) {
-  var concatResults = function (p1, p2) {
-    return parserMap((function (param) {
-                  return Pervasives.$at(param[0], param[1]);
-                }), parserAnd(p1, p2));
-  };
-  var lista2 = List.map((function (param) {
-          return parserMap((function (p1) {
-                        return /* :: */[
-                                p1,
-                                /* [] */0
-                              ];
-                      }), param);
-        }), lista);
-  return List.fold_left(concatResults, List.hd(lista2), List.tl(lista2));
-}
+run(miko, "carlos rojas c", (function (prim) {
+        console.log(prim);
+        return /* () */0;
+      }));
 
-function parserAnyOf(cadena) {
-  return parserChoice(List.map(parseChar, $$Array.to_list(cadena.split(""))));
-}
-
-function parseString(cadena) {
-  return parserAll(List.map(parseChar, $$Array.to_list(cadena.split(""))));
-}
-
-function lift2(f, xP, yP) {
-  return parserApply(parserApply(parserReturn(f), xP), yP);
-}
-
-function many(p) {
-  var innerFn = function (cadena, k) {
-    return run(p, cadena, (function (param) {
-                  if (param.tag) {
-                    return Curry._1(k, /* Exito */Block.__(0, [
-                                  /* [] */0,
-                                  cadena
-                                ]));
-                  } else {
-                    var resto1 = param[1];
-                    var valor1 = param[0];
-                    return run(many(p), resto1, (function (param) {
-                                  if (param.tag) {
-                                    return Curry._1(k, /* Exito */Block.__(0, [
-                                                  /* :: */[
-                                                    valor1,
-                                                    /* [] */0
-                                                  ],
-                                                  resto1
-                                                ]));
-                                  } else {
-                                    return Curry._1(k, /* Exito */Block.__(0, [
-                                                  List.append(/* :: */[
-                                                        valor1,
-                                                        /* [] */0
-                                                      ], param[0]),
-                                                  param[1]
-                                                ]));
-                                  }
-                                }));
-                  }
-                }));
-  };
-  return /* Parser */[innerFn];
-}
-
-function many1(p) {
-  var innerFn = function (cadena, k) {
-    return run(p, cadena, (function (f) {
-                  if (f.tag) {
-                    return Curry._1(k, f);
-                  } else {
-                    var resto1 = f[1];
-                    var valor1 = f[0];
-                    return run(many(p), resto1, (function (param) {
-                                  if (param.tag) {
-                                    return Curry._1(k, /* Exito */Block.__(0, [
-                                                  /* :: */[
-                                                    valor1,
-                                                    /* [] */0
-                                                  ],
-                                                  resto1
-                                                ]));
-                                  } else {
-                                    return Curry._1(k, /* Exito */Block.__(0, [
-                                                  List.append(/* :: */[
-                                                        valor1,
-                                                        /* [] */0
-                                                      ], param[0]),
-                                                  param[1]
-                                                ]));
-                                  }
-                                }));
-                  }
-                }));
-  };
-  return /* Parser */[innerFn];
-}
-
-function optional(p) {
-  var innerFn = function (cadena, k) {
-    return run(p, cadena, (function (param) {
-                  if (param.tag) {
-                    return Curry._1(k, /* Exito */Block.__(0, [
-                                  undefined,
-                                  cadena
-                                ]));
-                  } else {
-                    return Curry._1(k, /* Exito */Block.__(0, [
-                                  Caml_option.some(param[0]),
-                                  param[1]
-                                ]));
-                  }
-                }));
-  };
-  return /* Parser */[innerFn];
-}
-
-function skip(p) {
-  var innerFn = function (cadena, k) {
-    return run(p, cadena, (function (f) {
-                  if (f.tag) {
-                    return Curry._1(k, f);
-                  } else {
-                    return Curry._1(k, /* Exito */Block.__(0, [
-                                  /* () */0,
-                                  f[1]
-                                ]));
-                  }
-                }));
-  };
-  return /* Parser */[innerFn];
-}
-
-function keepLeft(p1, p2) {
-  return parserMap((function (param) {
-                return param[0];
-              }), parserAnd(p1, p2));
-}
-
-function keepRight(p1, p2) {
-  return parserMap((function (param) {
-                return param[1];
-              }), parserAnd(p1, p2));
-}
-
-var digit = parserAnyOf("0123456789");
-
-var digits = many1(digit);
-
-var intP = parserMap((function (param) {
-        return Caml_format.caml_int_of_string($$Array.of_list(param).join(""));
-      }), digits);
-
-var whitespace = parserAnyOf(" \t\n\r");
-
-var whitespaces = many(whitespace);
+run(miko, "carlos rojas c", (function (prim) {
+        console.log(prim);
+        return /* () */0;
+      }));
 
 var $neg$pipe = compose;
 
@@ -356,15 +432,15 @@ var $great$neg$great = parserAnd;
 
 var $less$at$great = parserMap;
 
-var $less$star$great = parserApply;
-
-var $neg$less$less = keepLeft;
-
-var $neg$great$great = keepRight;
-
 exports.compose = compose;
 exports.$neg$pipe = $neg$pipe;
 exports.run = run;
+exports.execParser = execParser;
+exports.memo = memo;
+exports.memo2 = memo2;
+exports.memoCPS = memoCPS;
+exports.pushContinuation = pushContinuation;
+exports.parseString = parseString;
 exports.parseChar = parseChar;
 exports.parseNotChar = parseNotChar;
 exports.parserAny = parserAny;
@@ -374,25 +450,5 @@ exports.parserAnd = parserAnd;
 exports.$great$neg$great = $great$neg$great;
 exports.parserMap = parserMap;
 exports.$less$at$great = $less$at$great;
-exports.parserReturn = parserReturn;
-exports.parserApply = parserApply;
-exports.$less$star$great = $less$star$great;
-exports.parserChoice = parserChoice;
-exports.parserAll = parserAll;
-exports.parserAnyOf = parserAnyOf;
-exports.parseString = parseString;
-exports.lift2 = lift2;
-exports.many = many;
-exports.many1 = many1;
-exports.optional = optional;
-exports.skip = skip;
-exports.keepLeft = keepLeft;
-exports.keepRight = keepRight;
-exports.$neg$less$less = $neg$less$less;
-exports.$neg$great$great = $neg$great$great;
-exports.digit = digit;
-exports.digits = digits;
-exports.intP = intP;
-exports.whitespace = whitespace;
-exports.whitespaces = whitespaces;
-/* digit Not a pure module */
+exports.miko = miko;
+/* parseString Not a pure module */
