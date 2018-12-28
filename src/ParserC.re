@@ -4,20 +4,20 @@ type parseResult ('a) =
 
 type continuation('a) = parseResult('a) => unit
 
-type  parser ('a) = Parser(string => continuation('a) => unit)
+type  parserFn ('a) = Parser(string => continuation('a) => unit)
 
-type trampoline = {
-    tabla: Hashtbl.t((parser('a), string), (list(parseResult('a)), list(continuation('a)))),
-    mutable pila: list((parser('a), string, continuation('a)))
-} constraint 'a = [ `O  | `I ]
+type parser('a) = {
+    fn: parserFn('a),
+    nombre: string
+}
 
 let compose = (f, g) =>
     x => g(f(x))
 
 let ( -| ) = compose
 
-let run = (parser, cadena, k):unit => 
-switch(parser) {
+let run = (parser, cadena, k) => 
+switch(parser.fn) {
 | Parser(fn) => fn(cadena, k)
 }
 
@@ -25,7 +25,7 @@ let execParser = (parser, cadena) => {
     let resultados = ref ([]);
     run (parser, cadena,
         fun
-        | Exito(v,"") => {resultados := [v, ...resultados^]}
+        | Exito(v,_) => {resultados := [v, ...resultados^]}
         | _ => () )
     resultados^ |> Array.of_list
 }
@@ -43,84 +43,39 @@ let memo = fn => {
         };
     };
 
-let memo2 = fn => {
-    let tabla = Hashtbl.create(10);
-    (arg1, arg2) =>
-        switch (Hashtbl.find(tabla, (arg1,arg2))) {
-        | exception Not_found => {
-            let valor = fn(arg1, arg2);
-            Hashtbl.add(tabla, (arg1, arg2), valor);
-            valor
-        }
-        | valor => valor
-        };
-    }
-
-
 let memoCPS = fn => {
     open Hashtbl;
+    let isResultSaved = (tabla,cadena:string, result:parseResult('a)) => 
+        find_all(tabla, cadena) |> List.mem(result)
+    
     let tablaContinuaciones = create(10);
     let tablaResultados = create(10);
-    Parser((arg, k) => {
-        let listadoContinuaciones =  switch(find(tablaContinuaciones, arg)) {
-        | exception Not_found => []
-        | lista => lista
-        };
+    let innerFn = Parser((arg, k) => {
+        let listadoContinuaciones =  find_all(tablaContinuaciones, arg);
         if (List.length(listadoContinuaciones) == 0) {
-            add(tablaContinuaciones, arg,[k]);
+            add(tablaContinuaciones, arg, k);
             run(fn, arg,
                 result => {
-                    switch (find(tablaResultados, arg)) {
-                    | exception Not_found => {
+                    switch (isResultSaved(tablaResultados, arg, result)) {
+                    | false => {
                         add(tablaResultados, arg, result);
-                        switch (find(tablaContinuaciones, arg)) {
-                        | exception Not_found => ()
-                        | lista => List.iter(cont=> cont(result), lista)
+                        let lista =  find_all(tablaContinuaciones, arg);
+                        lista |> List.iter(cont=> cont(result)) 
                         }
-                    }
                     | _ => ()
                     };
                 })
         } else {
-                replace(tablaContinuaciones, arg, [k, ...listadoContinuaciones])
-                switch (find(tablaResultados, arg)) {
-                | exception Not_found => ()
-                | valor => k(valor)
-                };
+                add(tablaContinuaciones, arg, k)
+                find_all(tablaResultados,arg) |> List.iter(valor=>k(valor))
         }
     })
+    let innerParser = {fn:innerFn,nombre:fn.nombre}
+    innerParser
 }
-
-let pushContinuation = (tramp, parser, cadena, cont) => {
-    switch (Hashtbl.find(tramp.tabla, (parser, cadena))) {
-    | (resultados, continuaciones) => {
-        Hashtbl.replace(tramp.tabla, (parser, cadena), (resultados, [cont, ...continuaciones]));
-        List.iter(cont, resultados)
-    }
-    | exception Not_found => {
-        Hashtbl.replace(tramp.tabla, (parser, cadena), ([], [cont]))
-        tramp.pila = [(parser, cadena,
-            result =>{
-                switch (Hashtbl.find(tramp.tabla, (parser, cadena))){
-                | (resultados, continuaciones) => {
-                    if (!List.mem(result, resultados)) {
-                        Hashtbl.replace(tramp.tabla,
-                                (parser, cadena),
-                                ([result, ...resultados], continuaciones));
-                        List.iter(c => c(result), continuaciones)
-                    }
-                    }
-                }
-            }), ...tramp.pila]
-    }
-    };
-}
-
-/* let string_of_list = Array.of_list -| Js.Array.joinWith("") */
 
 let parseString = memo(patron => {
-    let innerFn = (cadena,k) => {
-        Js.log("funcion parseString: " ++ patron ++ " " ++ cadena)
+    let innerFn = (cadena,k:continuation('a)) => {
         let longPatron = String.length(patron);
         let longCadena = String.length(cadena);
         if (longPatron > longCadena) {
@@ -134,7 +89,7 @@ let parseString = memo(patron => {
             }
         }
     };
-    memoCPS(Parser(innerFn))
+    memoCPS({fn:Parser(innerFn), nombre:"parseString-" ++ patron})
 })
 
 let parseChar = memo (caracter =>{
@@ -150,37 +105,10 @@ let parseChar = memo (caracter =>{
             k(Fallo({j|Esperaba $caracter y obtuve $car1|j}, cadena))
         })
     };
-    memoCPS(Parser(innerFn))
+    memoCPS({fn:Parser(innerFn),nombre:"parseChar-"++caracter})
 })
 
-let parseNotChar = caracter =>{
-    let innerFn = (cadena, k) => {
-        String.(
-        switch (length(cadena)) {
-        | 0 => k(Fallo("Final de la cadena", cadena))
-        | _ => let car1 = sub(cadena, 0,1)
-                let resto = sub(cadena, 1, length(cadena) - 1)
-            if (car1 != caracter) 
-                k(Exito(car1, resto))
-            else 
-            k(Fallo({j|No Esperaba $caracter |j}, cadena))
-    })};
-    Parser(innerFn)
-}
-
-let parserAny = () =>{
-    let innerFn = (cadena, k) => {
-        String.(
-            switch (length(cadena)) {
-            | 0 => k(Fallo("Final de la cadena", cadena))
-            | _ => let car1 = sub(cadena, 0,1)
-                    let resto = sub(cadena, 1, length(cadena) - 1)
-                    k(Exito(car1, resto))
-        })};
-    Parser( innerFn)
-}
-
-let parserOr = memo2((p1:parser(string), p2) =>{
+let parserOr = memo((p1:parser(string), p2) =>{
     let innerFn = (cadena, k) => 
         String.(
         switch (length(cadena)) {
@@ -188,15 +116,16 @@ let parserOr = memo2((p1:parser(string), p2) =>{
         | _ => {
                 run(p1, cadena, k);
                 run(p2, cadena, k);
+                ();
             }
         });
-    memoCPS(Parser(innerFn))
+    memoCPS({fn:Parser(innerFn),nombre:"parserOr-"++p1.nombre++"-"++p2.nombre})
 })
 
 let ( <|> ) = parserOr
 
 
-let parserAnd = memo2((p1:parser(string), p2:parser(string)) => {
+let parserAnd = memo((p1:parser(string), p2:parser(string)) => {
     let innerFn = (cadena, k) => 
         String.(
         switch (length(cadena)) {
@@ -206,12 +135,12 @@ let parserAnd = memo2((p1:parser(string), p2:parser(string)) => {
                     | Exito(valor1, resto1) =>
                         run (p2, resto1,
                             fun 
-                            | Exito (valor2, resto2) => k(Exito((valor1, valor2) , resto2))
+                            | Exito (valor2, resto2) => k(Exito(valor1 ++ valor2 , resto2))
                             | Fallo (_, _) as e1 => k(e1))
                     | Fallo(_, _) as e1 => k(e1))
             
         });
-    memoCPS(Parser(innerFn))
+    memoCPS({fn:Parser(innerFn),nombre:"parserAnd-"++p1.nombre++"-"++p2.nombre})
 })
 
 let ( >-> ) = parserAnd;
@@ -227,119 +156,36 @@ let parserMap = memo((fn:string=>string, p:parser(string)) => {
                         | Exito(valor, resto) => k(Exito(fn(valor), resto))
                         | Fallo(_,_) as e1 => k(e1))
             });
-    memoCPS(Parser(innerFn))
+    memoCPS({fn:Parser(innerFn),nombre:"parserMap-"++p.nombre})
 });
 
 let ( <@> ) = parserMap
 
-/* let parserReturn = memo(valor => {
+let parserReturn = memo((valor:string) => {
     let innerFn = (cadena, k) => 
         k(Exito(valor, cadena));
-        memoCPS(Parser(innerFn))
+        memoCPS({fn:Parser(innerFn),nombre:"parserReturn-"++valor})
 })
- */
-/* let parserApply = (fP, xP) => 
-        (((f,x)) => f(x)) <@> (fP >-> xP)
 
-let ( <*> ) = parserApply
- */
-/* let parserChoice = (lista) => List.(
-    fold_left(parserOr, hd(lista), tl(lista))); */
+let miko = parseString("carlos") <|> parseString("carlos rojas")
 
-/* let parserAll = lista => {
-    let concatResults = (p1, p2) =>
-        p1 >-> p2
-        |> parserMap(((l1, l2)) => l1@l2);
-    let lista2 = lista |> List.map (parserMap(p1=>[p1]))
-    List.tl(lista2)
-    |> List.fold_left (concatResults, List.hd(lista2) )
-}
+/* execParser(miko, "carlos rojas contreras") |> Js.log */
 
-let parserAnyOf = cadena =>
-Js.String.split("", cadena)
-|> Array.to_list
-|> List.map(parseChar)
-|> parserChoice
+/* let s1 = parseString("a")
+let rec s2 = arg => run(
+    parserAnd({fn:Parser(s),nombre:"parserS"},s1),
+    arg)
+and s = arg => run(
+    parserOr(s1, {fn:Parser(s2),nombre:"parserS2"}),
+    arg
+)
+ */    
 
-let parseString = cadena => 
-string_of_list <@>
-(Js.String.split("", cadena)
-    |> Array.to_list
-    |> List.map(parseChar)
-    |> parserAll)
-
-let lift2 = (f, xP, yP) => 
-    parserReturn(f) <*> xP <*> yP
-
-let rec many = p => {
-    let innerFn = (cadena, k) => 
-        run(p, cadena,
-            fun
-            | Fallo (_) => k(Exito([], cadena))
-            | Exito (valor1,resto1)  => 
-                run(many(p),resto1,
-                    fun
-                    | Exito (valor2,resto2) => k(Exito([valor1] @ valor2, resto2))
-                    | Fallo(_) => k(Exito ([valor1], resto1))));
-    Parser(innerFn)
-}
-
-let many1 = p => {
-    let innerFn = (cadena, k) => 
-        run(p, cadena,
-            fun
-            | Fallo (_) as f => k(f)
-            | Exito (valor1,resto1)  => 
-                run(many(p),resto1,
-                    fun
-                    | Exito (valor2,resto2) => k(Exito([valor1] @ valor2, resto2))
-                    | Fallo(_) => k(Exito([valor1], resto1))));
-    Parser(innerFn)
-}
-
-let optional = (p) => {
-    let innerFn = (cadena, k) => 
-        run (p, cadena,
-                fun
-                | Exito(v1,r1) => k(Exito(Some(v1), r1))
-                | Fallo(_) => k(Exito(None, cadena)));
-    Parser(innerFn)
-}
-
-let skip = p => {
-    let innerFn = (cadena, k) => 
-        run(p, cadena,
-            fun
-            | Exito(_v1, r1) => k(Exito((), r1))
-            | Fallo(_) as f => k(f));
-    Parser(innerFn)
-}
-
-let keepLeft = (p1,p2) =>
-    p1 >-> p2
-    |> parserMap (((a,_b)) => a)
-
-let keepRight = (p1,p2) => 
-    p1 >-> p2
-    |> parserMap (((_a,b)) => b)
-
-let ( -<< ) = keepLeft
-
-let ( ->> ) = keepRight;
-
-let digit = parserAnyOf("0123456789");
-
-let digits = many1(digit)
-
-let intP = {string_of_list -| int_of_string } <@> digits
-
-let whitespace = parserAnyOf("\ \t\n\r")
-
-let whitespaces = many(whitespace); */
-
-let miko = parserOr(parseString("carlos"), parseString("carlos rojas"))
-
-execParser(parseString("carlos rojas"), "carlos rojas") |> Js.log
-run(miko, "carlos rojas c", Js.log)
-run(miko, "carlos rojas c", Js.log)
-run(miko, "carlos rojas c", Js.log)
+ let rec s = arg => run(
+     parserOr(
+         parseString("a"),
+         parserAnd(
+             {fn:Parser(s),nombre:"parserS"},
+             parseString("a"))),
+         arg)
+run({fn:Parser(s),nombre:"parserS"}, "aaaaaaaaa", Js.log)
